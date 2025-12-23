@@ -101,7 +101,7 @@ function IndexPopup() {
   }
 
   // Handle form submission
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     addAccount()
   }
@@ -187,7 +187,7 @@ function IndexPopup() {
 
       {/* Add Account Form */}
       {showForm && (
-        <div className="add-form">
+        <form className="add-form" onSubmit={handleSubmit}>
           <input
             type="text"
             placeholder="Account Name"
@@ -200,10 +200,10 @@ function IndexPopup() {
             placeholder="TOTP Secret"
             value={totpSecret}
             onChange={(e) => setTotpSecret(e.target.value)}
-            onKeyPress={handleSecretKeyPress}
+            onKeyDown={handleSecretKeyPress}
           />
           <div className="form-buttons">
-            <button className="save-button" onClick={addAccount}>
+            <button className="save-button" type="submit">
               Save
             </button>
             <button
@@ -216,7 +216,7 @@ function IndexPopup() {
               Cancel
             </button>
           </div>
-        </div>
+        </form>
       )}
 
       {/* TOTP List */}
