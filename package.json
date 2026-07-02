@@ -4,6 +4,16 @@
   "version": "0.0.1",
   "description": "A simple TOTP authenticator extension.",
   "author": "Sankalp Mukim <sankalpmukim@gmail.com>",
+  "manifest": {
+    "browser_specific_settings": {
+      "gecko": {
+        "strict_min_version": "109.0",
+        "data_collection_permissions": {
+          "required": ["none"]
+        }
+      }
+    }
+  },
   "scripts": {
     "dev": "plasmo dev",
     "dev:firefox": "plasmo dev --target=firefox-mv2",
@@ -29,15 +39,5 @@
     "@types/react-dom": "18.2.18",
     "prettier": "3.2.4",
     "typescript": "5.3.3"
-  },
-  "manifest": {
-    "host_permissions": [
-      "https://*/*"
-    ],
-    "browser_specific_settings": {
-      "gecko": {
-        "id": "$FIREFOX_EXT_ID"
-      }
-    }
   }
 }
