@@ -44,6 +44,16 @@ The extension will auto-reload on code changes.
 - `importFromCSV()`: Parses CSV and validates account data
 - Account type definition
 
+**Autofill (shortcut-driven)**
+
+- `background.ts`: listens for the `autofill-totp` / `setup-autofill` commands. It injects the page script with `scripting.executeScript` under `activeTab` (no host permissions), generates the code (secrets never reach the page), and either sends `fill` or opens `setup`. The page script is imported via `url:./injected/autofill.ts` so Parcel bundles it as its own file. Before re-injecting, `parcelRequire*` globals are cleared, because the bundler's module cache would otherwise skip a re-run.
+- `autofill/types.ts`: `SiteConfig` (one per exact hostname), locators, and message types. `autofill/storage.ts`: accounts come from the Plasmo default store (`sync`); site configs live in `local` under `totp_autofill_sites`.
+- `injected/`: plain DOM code, no React. `detect.ts` scores OTP fields (single, split boxes, transparent input-otp style) and submit buttons. `locator.ts` builds selectors per shadow-root level plus an attribute fingerprint fallback. `fill.ts` fills via the native value setter and input/key/paste events, then submits. `wizard.ts` and `overlay.ts` draw the picker UI in a closed shadow root that is placed in the top layer.
+- Adoption levels: account linked with auto-detect → saved field (fill only, or the site auto-submits) → fill + submit (click a saved button, or Enter).
+- `options.tsx` (the "TOTP Manager" page) composes `manage/`: `accounts.tsx` (account list with live codes, add/edit form that accepts `otpauth://` links via `parseOtpauthURI` in utils.ts, account page with reveal/copy secret and delete, which cascades to that account's sites), `sites.tsx` (site cards and edit form), `shared.tsx` (hooks: `useTotpCodes`, `useAccountScope`, `useShortcuts`, `useCommandReceived`). Autofill features: "+ Add site" for manual setup (selectors typed as CSS, `>>>` between shadow-root levels; see `autofill/locatorText.ts`), `#account=<id>` scoping (the popup's ✎ per account), and a live shortcut check: the background broadcasts `commandReceived` on every press.
+- Chrome rejects `Command+Alt` shortcuts, both in the manifest and in its shortcut UI, so the default is `Alt+Shift+P`.
+- Firefox needs the explicit gecko `id` (`$FIREFOX_EXT_ID` from `.env`). Without it `storage.sync` throws ("will not work with a temporary addon ID"), which breaks both accounts and autofill.
+
 ### Data Flow
 
 1. **Initialization**: useStorage loads accounts from browser storage
@@ -55,7 +65,7 @@ The extension will auto-reload on code changes.
 
 ### Storage Schema
 
-Accounts stored via Plasmo storage (localStorage under the hood) as JSON array:
+Accounts stored via Plasmo storage (`chrome.storage.sync`, the Plasmo default area) as a JSON array:
 
 ```typescript
 interface Account {

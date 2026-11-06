@@ -33,3 +33,6 @@ dist/
 .tsbuildinfo
 key.json
 keys.json
+
+# tsc incremental output
+tsconfig.tsbuildinfo

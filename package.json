@@ -4,16 +4,6 @@
   "version": "1.0.0",
   "description": "A simple TOTP authenticator extension.",
   "author": "Sankalp Mukim <sankalpmukim@gmail.com>",
-  "manifest": {
-    "browser_specific_settings": {
-      "gecko": {
-        "strict_min_version": "109.0",
-        "data_collection_permissions": {
-          "required": ["none"]
-        }
-      }
-    }
-  },
   "scripts": {
     "dev": "plasmo dev",
     "dev:firefox": "plasmo dev --target=firefox-mv2",
@@ -41,6 +31,32 @@
     "typescript": "5.3.3"
   },
   "manifest": {
-    "permissions": ["storage"]
+    "browser_specific_settings": {
+      "gecko": {
+        "id": "$FIREFOX_EXT_ID",
+        "strict_min_version": "109.0",
+        "data_collection_permissions": {
+          "required": [
+            "none"
+          ]
+        }
+      }
+    },
+    "permissions": [
+      "storage",
+      "activeTab",
+      "scripting"
+    ],
+    "commands": {
+      "autofill-totp": {
+        "suggested_key": {
+          "default": "Alt+Shift+P"
+        },
+        "description": "Fill the TOTP code on this page (sets it up the first time)"
+      },
+      "setup-autofill": {
+        "description": "Set up or edit TOTP autofill for this site"
+      }
+    }
   }
 }
