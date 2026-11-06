@@ -107,10 +107,17 @@ export function suggestAccount(
 
 /** Which of the incremental adoption levels a site is at */
 export function siteLevel(site: SiteConfig): {
-  level: 1 | 2 | 3
+  level: 1 | 2 | 3 | 4
   label: string
 } {
   if (!site.field) return { level: 1, label: "Linked · auto-detect" }
+  if (site.autoFill?.enabled) {
+    const submits = site.submit.mode === "click" || site.submit.mode === "enter"
+    return {
+      level: 4,
+      label: submits ? "Automatic fill + submit" : "Automatic fill"
+    }
+  }
   if (site.submit.mode === "click" || site.submit.mode === "enter")
     return { level: 3, label: "Fill + submit" }
   if (site.submit.mode === "auto")

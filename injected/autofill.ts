@@ -10,8 +10,10 @@ import { PAGE_SCRIPT_VERSION } from "../autofill/types"
 import type {
   BackgroundMessage,
   PageMessage,
-  RunResult
+  RunResult,
+  SiteConfig
 } from "../autofill/types"
+import { armAuto, disarmAuto } from "./auto"
 import { runFill } from "./fill"
 import { showToast } from "./overlay"
 import { closeWizard, openWizard } from "./wizard"
@@ -66,34 +68,43 @@ const editAction = {
   onClick: () => void send({ type: "startSetup" })
 }
 
-async function handleFill(
-  msg: Extract<PageMessage, { type: "fill" }>
-): Promise<RunResult> {
-  closeWizard()
-  const { target: _target, ...result } = await runFill(msg.site, msg.code)
+function showResult(
+  result: RunResult,
+  site: SiteConfig,
+  accountName: string,
+  auto: boolean
+) {
   const fallbackNote = result.usedFallback
     ? "The saved field wasn't found, so it was auto-detected."
     : undefined
+  const settingsAction = {
+    label: "Settings",
+    onClick: () => void send({ type: "openOptions" })
+  }
+  // Automatic runs point to settings (where auto-fill is turned off)
+  const actions = auto ? [settingsAction] : [editAction]
 
   switch (result.outcome) {
     case "submitted":
       showToast({
         level: "success",
-        message: "Code filled and submitted",
-        detail: fallbackNote ?? msg.accountName,
-        actions: result.usedFallback ? [editAction] : []
+        message: auto
+          ? "Code filled and submitted automatically"
+          : "Code filled and submitted",
+        detail: fallbackNote ?? accountName,
+        actions: auto || result.usedFallback ? actions : []
       })
       break
     case "filled":
       showToast({
         level: "success",
-        message: "Code filled",
+        message: auto ? "Code filled automatically" : "Code filled",
         detail:
           fallbackNote ??
-          (msg.site.submit.mode === "auto"
-            ? `${msg.accountName} · the site should continue on its own`
-            : `${msg.accountName} · submit when you're ready`),
-        actions: [editAction]
+          (site.submit.mode === "auto"
+            ? `${accountName} · the site should continue on its own`
+            : `${accountName} · submit when you're ready`),
+        actions
       })
       break
     case "partial":
@@ -111,11 +122,15 @@ async function handleFill(
         message:
           result.outcome === "not-found"
             ? "Couldn't find the code field"
-            : "The page didn't accept the code",
+            : result.outcome === "error"
+              ? "Couldn't fill the code"
+              : "The page didn't accept the code",
         detail:
           result.outcome === "not-found"
             ? "Is the 2FA prompt open? You can copy the code or point at the field."
-            : "Copy the code and paste it yourself, or pick the field again.",
+            : result.outcome === "error"
+              ? result.message
+              : "Copy the code and paste it yourself, or pick the field again.",
         actions: [
           { label: "Copy code", onClick: copyCode },
           {
@@ -126,10 +141,37 @@ async function handleFill(
         duration: 10000
       })
   }
+}
+
+async function handleFill(
+  msg: Extract<PageMessage, { type: "fill" }>
+): Promise<RunResult> {
+  closeWizard()
+  // The shortcut wins over a pending automatic fill on this page
+  disarmAuto(true)
+  const { target: _target, ...result } = await runFill(msg.site, msg.code)
+  showResult(result, msg.site, msg.accountName, false)
   return result
 }
 
+/** Automatic run, after the countdown: same path as the shortcut */
+async function runAuto(site: SiteConfig, accountName: string) {
+  const res = await send<{ ok: boolean; code?: string; error?: string }>({
+    type: "getCode"
+  })
+  let result: RunResult
+  if (!res?.code) {
+    result = { outcome: "error", message: res?.error || "No code available" }
+  } else {
+    const { target: _target, ...filled } = await runFill(site, res.code)
+    result = filled
+  }
+  showResult(result, site, accountName, true)
+  void send({ type: "recordRun", result, trigger: "auto" })
+}
+
 function handleSetup(msg: Extract<PageMessage, { type: "setup" }>) {
+  disarmAuto(true)
   openWizard({
     host: msg.host,
     accounts: msg.accounts,
@@ -180,6 +222,15 @@ function onMessage(
       return true
     case "setup":
       handleSetup(msg)
+      sendResponse({ ok: true })
+      return false
+    case "autoArm":
+      armAuto({
+        site: msg.site,
+        accountName: msg.accountName,
+        shortcut: msg.shortcut,
+        run: runAuto
+      })
       sendResponse({ ok: true })
       return false
     case "toast":

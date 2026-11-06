@@ -224,3 +224,12 @@ export function resolveLocator(locator: ElementLocator): Resolved | null {
   if (fuzzy) return { el: fuzzy, fuzzy: true }
   return exact ? { el: exact, fuzzy: false } : null
 }
+
+/**
+ * Selectors only, and only a visible match: cheap enough to run on every DOM
+ * change, and never guesses (used for filling without the shortcut).
+ */
+export function resolveExact(locator: ElementLocator): Element | null {
+  const el = bySelectors(locator)
+  return el && isVisible(el) ? el : null
+}

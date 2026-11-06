@@ -1,5 +1,6 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
+import { ext } from "../autofill/ext"
 import {
   locatorToText,
   normalizeHost,
@@ -7,10 +8,154 @@ import {
   textToLocator,
   validateLocatorText
 } from "../autofill/locatorText"
+import {
+  hasHostAccess,
+  removeHostAccess,
+  requestHostAccess
+} from "../autofill/permissions"
 import { siteLevel } from "../autofill/storage"
-import type { FieldKind, SiteConfig, SubmitMode } from "../autofill/types"
+import {
+  AUTO_FILL_DELAYS,
+  DEFAULT_AUTO_FILL_DELAY,
+  type AutoFillConfig,
+  type FieldKind,
+  type SiteConfig,
+  type SubmitMode
+} from "../autofill/types"
 import type { Account } from "../utils"
 import { OUTCOME_LABELS, PencilIcon, SUBMIT_LABELS, timeAgo } from "./shared"
+
+// ---------------------------------------------------------------------------
+// Auto-fill when the page opens
+
+/** Whether the browser currently lets us run on this host on our own */
+function useHostAccess(host: string): boolean | null {
+  const [access, setAccess] = useState<boolean | null>(null)
+  useEffect(() => {
+    let live = true
+    const check = () =>
+      void hasHostAccess(host).then((a) => live && setAccess(a))
+    check()
+    // The pinned @types/chrome lacks removeListener on these events
+    type Ev = {
+      addListener: (fn: () => void) => void
+      removeListener: (fn: () => void) => void
+    }
+    const events = [
+      ext.permissions.onAdded,
+      ext.permissions.onRemoved
+    ] as unknown as Ev[]
+    events.forEach((ev) => ev.addListener(check))
+    return () => {
+      live = false
+      events.forEach((ev) => ev.removeListener(check))
+    }
+  }, [host])
+  return access
+}
+
+function DelaySelect({
+  value,
+  onChange,
+  id
+}: {
+  value: number
+  onChange: (delaySec: number) => void
+  id?: string
+}) {
+  return (
+    <select
+      id={id}
+      className="inline-select"
+      aria-label="Countdown before filling"
+      value={value}
+      onChange={(e) => onChange(Number(e.target.value))}>
+      {AUTO_FILL_DELAYS.map((d) => (
+        <option key={d} value={d}>
+          {d} second{d === 1 ? "" : "s"}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+/** Toggle + delay on a site card. Turning it on asks the browser for access. */
+function AutoFillControl({
+  site,
+  onChange
+}: {
+  site: SiteConfig
+  onChange: (autoFill: AutoFillConfig) => void
+}) {
+  const access = useHostAccess(site.host)
+  const [error, setError] = useState("")
+  const enabled = !!site.autoFill?.enabled
+  const delaySec = site.autoFill?.delaySec ?? DEFAULT_AUTO_FILL_DELAY
+
+  if (!site.field) {
+    return (
+      <span className="muted">
+        Off. Needs a saved code field first (edit the site, or pick it on the
+        page).
+      </span>
+    )
+  }
+
+  // Called straight from the change event: the request needs the gesture
+  const turnOn = () => {
+    setError("")
+    void requestHostAccess(site.host).then((granted) =>
+      granted
+        ? onChange({ enabled: true, delaySec })
+        : setError(`Access to ${site.host} wasn't allowed, so this stays off.`)
+    )
+  }
+  const turnOff = () => {
+    setError("")
+    onChange({ enabled: false, delaySec })
+    void removeHostAccess(site.host)
+  }
+
+  return (
+    <span className="stack">
+      <label className="check-row">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => (e.target.checked ? turnOn() : turnOff())}
+        />
+        Fill automatically when the code field appears
+      </label>
+      {enabled ? (
+        <span className="hint-inline inline-row">
+          After a countdown of{" "}
+          <DelaySelect
+            value={delaySec}
+            onChange={(d) => onChange({ enabled: true, delaySec: d })}
+          />{" "}
+          that Esc cancels.
+        </span>
+      ) : (
+        <span className="hint-inline">
+          No shortcut needed. Your browser asks once to allow access to{" "}
+          {site.host}.
+        </span>
+      )}
+      {enabled && access === false && (
+        <span className="hint-inline bad-text">
+          The browser no longer allows access to {site.host}, so this can't run.{" "}
+          <button className="link" onClick={turnOn}>
+            Allow again
+          </button>
+        </span>
+      )}
+      {!site.enabled && enabled && (
+        <span className="hint-inline">Paused with the rest of this site.</span>
+      )}
+      {error && <span className="hint-inline bad-text">{error}</span>}
+    </span>
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Edit / add form
@@ -51,6 +196,10 @@ export function SiteForm({
   )
   const [buttonSelector, setButtonSelector] = useState(
     locatorToText(initial?.submit.locator)
+  )
+  const [autoOn, setAutoOn] = useState(!!initial?.autoFill?.enabled)
+  const [autoDelay, setAutoDelay] = useState(
+    initial?.autoFill?.delaySec ?? DEFAULT_AUTO_FILL_DELAY
   )
   const [error, setError] = useState("")
 
@@ -96,8 +245,28 @@ export function SiteForm({
           ? textToLocator(buttonSelector, initial?.submit.locator)
           : undefined
       },
+      autoFill: {
+        enabled: autoOn && fieldMode !== "auto",
+        delaySec: autoDelay
+      },
       needsSetup: false,
       updatedAt: now
+    }
+
+    const hadAccess = initial?.autoFill?.enabled ? initial.host : null
+    if (hadAccess && (!site.autoFill!.enabled || hadAccess !== cleanHost)) {
+      void removeHostAccess(hadAccess)
+    }
+    if (site.autoFill!.enabled) {
+      // Requested within the submit event: the browser needs the gesture
+      void requestHostAccess(cleanHost).then((granted) => {
+        if (granted) return onSave(site, initial?.host)
+        setAutoOn(false)
+        setError(
+          `Access to ${cleanHost} wasn't allowed, so automatic filling is off. Save again to keep the other changes.`
+        )
+      })
+      return
     }
     onSave(site, initial?.host)
   }
@@ -218,6 +387,38 @@ export function SiteForm({
             </>
           )}
         </span>
+
+        <label className="key" htmlFor="f-auto">
+          On page load
+        </label>
+        <span className="stack">
+          <label className="check-row">
+            <input
+              id="f-auto"
+              type="checkbox"
+              checked={autoOn && fieldMode !== "auto"}
+              disabled={fieldMode === "auto"}
+              onChange={(e) => setAutoOn(e.target.checked)}
+            />
+            Fill automatically when the code field appears
+          </label>
+          {fieldMode === "auto" ? (
+            <span className="hint-inline">
+              Needs a saved code field, so it never fills the wrong input.
+            </span>
+          ) : autoOn ? (
+            <span className="hint-inline inline-row">
+              After a countdown of{" "}
+              <DelaySelect value={autoDelay} onChange={setAutoDelay} /> that Esc
+              cancels. Saving asks your browser to allow access to this site.
+            </span>
+          ) : (
+            <span className="hint-inline">
+              No shortcut needed: a countdown appears, then it fills (and
+              submits, if set above).
+            </span>
+          )}
+        </span>
       </div>
 
       {error && <p className="warning">{error}</p>}
@@ -241,6 +442,7 @@ export function SiteCard({
   site,
   accounts,
   onToggle,
+  onAutoFill,
   onEdit,
   onRepick,
   onDelete
@@ -248,6 +450,7 @@ export function SiteCard({
   site: SiteConfig
   accounts: Account[]
   onToggle: (enabled: boolean) => void
+  onAutoFill: (autoFill: AutoFillConfig) => void
   onEdit: () => void
   onRepick: () => void
   onDelete: () => void
@@ -341,6 +544,9 @@ export function SiteCard({
           )}
         </span>
 
+        <span className="key">On page load</span>
+        <AutoFillControl site={site} onChange={onAutoFill} />
+
         <span className="key">Last run</span>
         <span>
           {run ? (
@@ -348,7 +554,9 @@ export function SiteCard({
               <span
                 className={`dot ${runOk ? "ok" : run.outcome === "partial" ? "warn" : "bad"}`}
               />
-              {OUTCOME_LABELS[run.outcome]} · {timeAgo(run.at)}
+              {OUTCOME_LABELS[run.outcome]}
+              {run.trigger === "auto" ? " automatically" : ""} ·{" "}
+              {timeAgo(run.at)}
               <div className="muted small">{run.message}</div>
             </>
           ) : (

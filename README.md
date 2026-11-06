@@ -100,11 +100,12 @@ The ⚙ in the popup opens the **TOTP Manager** page. The ✎ next to an account
 - **Accounts**: live codes (click to copy), add accounts (paste the base32 setup key *or* an `otpauth://` link, which also fills in the name; a code preview helps you check the secret), CSV import/export, and how many sites each account autofills.
 - **Account page**: large code with a countdown, the secret (hidden until you reveal it, with a copy button), rename or change the secret, delete (which also removes its autofill sites), and that account's autofill sites.
 - **Autofill sites**: edit any site by hand (✎), or **+ Add site** without the on-page picker. Set the hostname, account, code field (auto-detect, single input or separate boxes, as a CSS selector; use `>>>` to step into a shadow root) and what happens after filling. You can also pause, remove or re-pick a site, and see its last run and success rate.
+- **Automatic filling (no shortcut)**: on a site with a saved code field, tick **“Fill automatically when the code field appears”** and choose a 1, 2, 3 or 5 second countdown. When the field shows up (also on single-page apps where it appears later), a toast with a filling ring says “Autofilling your *account* code in Ns”. **Esc**, **Cancel** or typing in the field yourself stops it; **Fill now** skips the wait. The code is generated only after the countdown, then filled and submitted as configured. There's at most one automatic attempt per page, and it waits while the tab is in the background. Turning it on asks your browser for access to that one site, and turning it off (or removing the site) gives the access back.
 - **Shortcut check**: with the page open, press the shortcut. It confirms whether the browser delivered it.
 
 The shortcut can be changed on `chrome://extensions/shortcuts` (Chrome) or under about:addons → ⚙ → Manage Extension Shortcuts (Firefox). Chrome does not allow ⌘⌥ combinations; Firefox does.
 
-**Privacy**: the page script is injected only into the active tab, and only when you press the shortcut (`activeTab`). The extension has no standing access to websites. Secrets never leave the extension; the page only receives the current 6-digit code, and only for a site you linked.
+**Privacy**: by default the page script is injected only into the active tab, and only when you press the shortcut (`activeTab`), so the extension has no standing access to websites. Automatic filling is the exception: it runs only on the sites you turn it on for, using access you grant per site. Secrets never leave the extension; the page only receives the current 6-digit code, and only for a site you linked.
 
 ## TOTP Secret Format
 

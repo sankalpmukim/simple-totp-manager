@@ -153,4 +153,10 @@ kbd {
 .toast button.btn:hover { background: rgba(138,180,248,.12); }
 .toast .icon-btn { color: #9aa0a6; }
 .toast .icon-btn:hover { background: rgba(255,255,255,.1); }
+.toast.countdown .ring-wrap { background: transparent; width: 22px; height: 22px; margin-top: -1px; }
+.ring { width: 22px; height: 22px; transform: rotate(-90deg); }
+.ring circle { fill: none; stroke-width: 3; }
+.ring-track { stroke: rgba(255,255,255,.18); }
+.ring-fill { stroke: #8ab4f8; stroke-linecap: round; }
+@media (prefers-reduced-motion: reduce) { .ring-fill { transition: none !important; } }
 `

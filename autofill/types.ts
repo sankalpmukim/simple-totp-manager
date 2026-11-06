@@ -79,7 +79,18 @@ export interface RunRecord {
   at: number
   outcome: RunOutcome
   message: string
+  /** How the run started; undefined means the shortcut (older records) */
+  trigger?: "shortcut" | "auto"
 }
+
+export interface AutoFillConfig {
+  enabled: boolean
+  /** Countdown before filling, in seconds */
+  delaySec: number
+}
+
+export const AUTO_FILL_DELAYS = [1, 2, 3, 5] as const
+export const DEFAULT_AUTO_FILL_DELAY = 5
 
 export interface SiteConfig {
   /** Exact hostname the config applies to, e.g. "github.com" */
@@ -92,6 +103,11 @@ export interface SiteConfig {
   submit: SubmitConfig
   /** When set, the next shortcut press opens setup instead of filling */
   needsSetup?: boolean
+  /**
+   * Fill without the shortcut when the saved field appears, after a short
+   * cancellable countdown. Needs per-site host access granted at runtime.
+   */
+  autoFill?: AutoFillConfig
   createdAt: number
   updatedAt: number
   lastRun?: RunRecord
@@ -144,6 +160,12 @@ export type PageMessage =
       shortcut?: string
     }
   | { type: "toast"; level: ToastLevel; message: string }
+  | {
+      type: "autoArm"
+      site: SiteConfig
+      accountName: string
+      shortcut?: string
+    }
 
 export type ToastLevel = "success" | "info" | "error"
 
@@ -153,6 +175,7 @@ export type BackgroundMessage =
   | { type: "getCode" }
   | { type: "startSetup"; reason?: string }
   | { type: "openOptions" }
+  | { type: "recordRun"; result: RunResult; trigger: "shortcut" | "auto" }
 
 /** background -> extension pages (Autofill settings) */
 export type ExtensionPageMessage = {

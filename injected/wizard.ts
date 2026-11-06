@@ -101,7 +101,8 @@ function sameTarget(a: FieldTarget | null, b: FieldTarget | null) {
 
 class Wizard {
   private step: Step = "account"
-  private accountId: number
+  /** null until chosen, when nothing hints which account the site uses */
+  private accountId: number | null
   private field: FieldTarget | null = null
   private fieldAuto = false
   private submitMode: SubmitMode | null = null
@@ -136,11 +137,15 @@ class Wizard {
     const { existing, accounts, suggestedAccountId } = opts
     const known = (id?: number) =>
       id !== undefined && accounts.some((a) => a.id === id)
+    // Never guess between several accounts: a wrong pick silently fills
+    // codes for the wrong secret
     this.accountId = known(existing?.accountId)
       ? existing!.accountId
       : known(suggestedAccountId)
         ? suggestedAccountId!
-        : accounts[0].id
+        : accounts.length === 1
+          ? accounts[0].id
+          : null
 
     if (existing?.field) {
       const resolved = resolveLocator(existing.field.locator)
@@ -249,7 +254,7 @@ class Wizard {
     const mode = this.submitMode ?? "none"
     const draft: SiteDraft = {
       host: this.opts.host,
-      accountId: this.accountId,
+      accountId: this.accountId!,
       field,
       submit: {
         mode,
@@ -532,13 +537,30 @@ class Wizard {
         {
           on: {
             change: (e) => {
+              const first = this.accountId === null
               this.accountId = Number((e.target as HTMLSelectElement).value)
+              // Re-render once to enable Next and drop the placeholder
+              if (first) {
+                this.render()
+                this.panel.querySelector("select")?.focus()
+              }
             },
             keydown: (e) => {
-              if ((e as KeyboardEvent).key === "Enter") this.goTo("field")
+              if (
+                (e as KeyboardEvent).key === "Enter" &&
+                this.accountId !== null
+              )
+                this.goTo("field")
             }
           }
         },
+        this.accountId === null
+          ? h(
+              "option",
+              { value: "", selected: true, disabled: true },
+              "Choose an account…"
+            )
+          : null,
         ...this.opts.accounts.map((a) =>
           h(
             "option",
@@ -554,7 +576,13 @@ class Wizard {
         select,
         suggested
           ? h("div", { class: "hint" }, "Suggested from the site name.")
-          : null
+          : this.accountId === null
+            ? h(
+                "div",
+                { class: "hint" },
+                "Pick the account whose code this site asks for. Check that its code in the popup matches what the site expects."
+              )
+            : null
       ]
     }
 
@@ -761,7 +789,7 @@ class Wizard {
         "div",
         { class: "foot" },
         btn("Cancel", () => this.close()),
-        btn("Next", () => this.goTo("field"), true)
+        btn("Next", () => this.goTo("field"), true, this.accountId === null)
       )
     }
     if (this.step === "field") {

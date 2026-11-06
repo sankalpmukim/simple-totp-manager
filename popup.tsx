@@ -3,7 +3,13 @@ import { useEffect, useRef, useState } from "react"
 import { useStorage } from "@plasmohq/storage/hook"
 
 import { generateTOTP, getRemainingTime } from "./totp"
-import { exportToCSV, importFromCSV } from "./utils"
+import {
+  exportToCSV,
+  importFromCSV,
+  normalizeSecret,
+  parseOtpauthURI,
+  validateSecret
+} from "./utils"
 import type { Account } from "./utils"
 
 import "./popup.css"
@@ -44,16 +50,31 @@ function IndexPopup() {
 
   // Add new account
   const addAccount = () => {
-    const name = accountName.trim()
-    const secret = totpSecret.trim()
+    // An otpauth:// link (what QR codes contain) carries the secret and name
+    const parsed = parseOtpauthURI(totpSecret)
+    const name = accountName.trim() || parsed?.name || ""
+    const secret = parsed ? parsed.secret : totpSecret.trim()
 
     if (!name || !secret) {
       alert("Please enter both account name and TOTP secret")
       return
     }
 
-    // Clean secret
-    const cleanSecret = secret.replace(/\s/g, "").toUpperCase()
+    // Clean secret, and refuse ones that could never produce a code
+    const cleanSecret = normalizeSecret(secret)
+    const problem = validateSecret(cleanSecret)
+    if (problem) {
+      alert(`That secret doesn't look right: ${problem}.`)
+      return
+    }
+    if (
+      parsed?.warnings.length &&
+      !confirm(
+        `${parsed.warnings.join(". ")}.\n\nCodes may not match. Add anyway?`
+      )
+    ) {
+      return
+    }
 
     const newAccount: Account = {
       id: Date.now(),
@@ -217,7 +238,7 @@ function IndexPopup() {
           />
           <input
             type="text"
-            placeholder="TOTP Secret"
+            placeholder="TOTP Secret or otpauth:// link"
             value={totpSecret}
             onChange={(e) => setTotpSecret(e.target.value)}
             onKeyDown={handleSecretKeyPress}

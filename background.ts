@@ -11,6 +11,7 @@
 import pageScriptUrl from "url:./injected/autofill.ts"
 
 import { actionApi, ext } from "./autofill/ext"
+import { hasHostAccess } from "./autofill/permissions"
 import {
   getAccounts,
   getSites,
@@ -148,17 +149,40 @@ function isSuccess(result: RunResult) {
   return result.outcome === "filled" || result.outcome === "submitted"
 }
 
+/** A code about to expire may be rejected by the time it is submitted */
+async function freshCode(secret: string): Promise<string> {
+  const msIntoWindow = Date.now() % 30000
+  if (msIntoWindow > 28500) await sleep(30000 - msIntoWindow + 100)
+  return generateTOTP(secret)
+}
+
+async function recordRun(
+  host: string,
+  result: RunResult,
+  trigger: "shortcut" | "auto"
+) {
+  await updateSite(host, (s) => ({
+    ...s,
+    lastRun: {
+      at: Date.now(),
+      outcome: result.outcome,
+      message: result.message,
+      trigger
+    },
+    stats: {
+      runs: (s.stats?.runs || 0) + 1,
+      successes: (s.stats?.successes || 0) + (isSuccess(result) ? 1 : 0)
+    }
+  }))
+}
+
 async function fill(
   tabId: number,
   site: SiteConfig,
   secret: string,
   accountName: string
 ) {
-  // A code about to expire may be rejected by the time it is submitted
-  const msIntoWindow = Date.now() % 30000
-  if (msIntoWindow > 28500) await sleep(30000 - msIntoWindow + 100)
-
-  const code = await generateTOTP(secret)
+  const code = await freshCode(secret)
   if (!/^\d+$/.test(code)) {
     await toast(
       tabId,
@@ -180,18 +204,7 @@ async function fill(
     result = { outcome: "error", message: String((e as Error)?.message || e) }
   }
   if (!result) return
-  await updateSite(site.host, (s) => ({
-    ...s,
-    lastRun: {
-      at: Date.now(),
-      outcome: result.outcome,
-      message: result.message
-    },
-    stats: {
-      runs: (s.stats?.runs || 0) + 1,
-      successes: (s.stats?.successes || 0) + (isSuccess(result) ? 1 : 0)
-    }
-  }))
+  await recordRun(site.host, result, "shortcut")
 }
 
 async function runForTab(tabId: number, host: string) {
@@ -251,6 +264,47 @@ ext.commands.onCommand.addListener((command, tab) => {
   void handleCommand(command, tab)
 })
 
+// ---------------------------------------------------------------------------
+// Auto-fill when the page opens
+//
+// Only for sites where the user turned it on, which also granted host access
+// for that one site. Without that grant tab.url is hidden from us and
+// injection fails, so other sites are never touched.
+
+async function maybeAutoArm(tabId: number, url?: string) {
+  const host = hostOf(url)
+  if (!host) return
+  const site = (await getSites())[host]
+  if (!site?.autoFill?.enabled || !site.enabled || site.needsSetup) return
+  if (!site.field) return
+  if (!(await hasHostAccess(host))) return
+  const account = (await getAccounts()).find((a) => a.id === site.accountId)
+  if (!account) return
+  const pong = await ensurePageScript(tabId)
+  if (!pong || pong.host !== host) return
+  try {
+    await sendToPage(tabId, {
+      type: "autoArm",
+      site,
+      accountName: account.name,
+      shortcut: await getShortcut()
+    })
+  } catch {
+    // page navigated away meanwhile
+  }
+}
+
+ext.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  // Full loads finish with status "complete"; single-page apps change the
+  // URL of an already complete tab
+  if (
+    changeInfo.status === "complete" ||
+    (changeInfo.url && tab.status === "complete")
+  ) {
+    void maybeAutoArm(tabId, tab.url)
+  }
+})
+
 function hostOf(url?: string): string | null {
   try {
     const u = new URL(url || "")
@@ -294,7 +348,20 @@ async function handleMessage(
       const account = site && accounts.find((a) => a.id === site.accountId)
       if (!account)
         return { ok: false, error: "No account linked to this site" }
-      return { ok: true, code: await generateTOTP(account.secret) }
+      const code = await freshCode(account.secret)
+      if (!/^\d+$/.test(code)) {
+        return {
+          ok: false,
+          error: `Couldn't generate a code for ${account.name}`
+        }
+      }
+      return { ok: true, code }
+    }
+    case "recordRun": {
+      const sites = await getSites()
+      if (!sites[host]) return { ok: false, error: "Site not set up" }
+      await recordRun(host, msg.result, msg.trigger)
+      return { ok: true }
     }
     case "startSetup":
       await startSetup(tabId, host, msg.reason)

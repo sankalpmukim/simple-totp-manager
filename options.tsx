@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 
 import { useStorage } from "@plasmohq/storage/hook"
 
+import { removeHostAccess } from "./autofill/permissions"
 import { siteStorage } from "./autofill/storage"
 import {
   ACCOUNTS_KEY,
@@ -102,6 +103,11 @@ function LevelsPanel() {
           <span className="level level-3">Fill + submit</span> It also clicks
           the submit button or presses Enter for you.
         </li>
+        <li>
+          <span className="level level-4">Automatic</span> No shortcut: when the
+          code field appears, a short countdown runs (Esc cancels), then it
+          fills and submits.
+        </li>
       </ol>
     </section>
   )
@@ -176,6 +182,11 @@ function OptionsPage() {
     setNotice({ level: "ok", text: `Saved ${account.name}` })
   }
   const deleteAccount = (account: Account) => {
+    for (const s of all) {
+      if (s.accountId === account.id && s.autoFill?.enabled) {
+        void removeHostAccess(s.host)
+      }
+    }
     setAccounts((prev) => (prev || []).filter((a) => a.id !== account.id))
     setSites((prev) =>
       Object.fromEntries(
@@ -238,12 +249,14 @@ function OptionsPage() {
         [host]: { ...current, ...patch, updatedAt: Date.now() }
       }
     })
-  const deleteSite = (host: string) =>
+  const deleteSite = (host: string) => {
+    if (sites?.[host]?.autoFill?.enabled) void removeHostAccess(host)
     setSites((prev) => {
       const next = { ...(prev || {}) }
       delete next[host]
       return next
     })
+  }
 
   const mainShortcut = shortcuts[COMMAND_AUTOFILL]
   const formProps = {
@@ -306,6 +319,7 @@ function OptionsPage() {
               site={site}
               accounts={accountList}
               onToggle={(enabled) => patchSite(site.host, { enabled })}
+              onAutoFill={(autoFill) => patchSite(site.host, { autoFill })}
               onEdit={() => setEditing(site.host)}
               onRepick={() => patchSite(site.host, { needsSetup: true })}
               onDelete={() => deleteSite(site.host)}
@@ -391,8 +405,9 @@ function OptionsPage() {
         <p className="privacy muted small">
           Secrets are stored unencrypted in the browser's extension storage (and
           synced with your browser profile if sync is on). Websites never see
-          them, only the current code. Autofill only runs on the tab you're on,
-          when you press the shortcut.
+          them, only the current code. Autofill runs when you press the
+          shortcut, or by itself only on sites where you turned on automatic
+          filling and allowed access.
         </p>
       </main>
     </div>

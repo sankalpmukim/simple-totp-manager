@@ -218,6 +218,117 @@ export function showToast(opts: ToastOptions): () => void {
 }
 
 // ---------------------------------------------------------------------------
+// Countdown toast (auto-fill)
+
+export interface CountdownOptions {
+  /** Main line; receives the whole seconds left */
+  message: (secondsLeft: number) => string
+  detail?: string
+  durationMs: number
+  /** Primary action, runs the countdown's work right away */
+  nowLabel: string
+  onComplete: () => void
+  onCancel: () => void
+}
+
+export interface CountdownHandle {
+  /** Stop without calling onCancel (e.g. the shortcut took over) */
+  dispose: () => void
+  cancel: () => void
+}
+
+const SVG_NS = "http://www.w3.org/2000/svg"
+
+/** Toast with a ring that fills up while it counts down */
+export function showCountdown(opts: CountdownOptions): CountdownHandle {
+  getOverlayRoot()
+  const container = toastsEl!
+  container.replaceChildren()
+
+  const radius = 9
+  const circumference = 2 * Math.PI * radius
+  const svg = document.createElementNS(SVG_NS, "svg")
+  svg.setAttribute("viewBox", "0 0 22 22")
+  svg.setAttribute("class", "ring")
+  for (const cls of ["ring-track", "ring-fill"]) {
+    const circle = document.createElementNS(SVG_NS, "circle")
+    circle.setAttribute("cx", "11")
+    circle.setAttribute("cy", "11")
+    circle.setAttribute("r", String(radius))
+    circle.setAttribute("class", cls)
+    svg.append(circle)
+  }
+  const fill = svg.lastElementChild as SVGCircleElement
+  fill.style.strokeDasharray = String(circumference)
+  fill.style.strokeDashoffset = String(circumference)
+
+  const secondsLeft = () => Math.max(1, Math.ceil((end - Date.now()) / 1000))
+  const msg = h("span", { class: "msg" })
+  let done = false
+  const finish = (complete: boolean, notify = true) => {
+    if (done) return
+    done = true
+    clearInterval(ticker)
+    clearTimeout(timer)
+    toast.remove()
+    maybeTeardown()
+    if (!notify) return
+    if (complete) opts.onComplete()
+    else opts.onCancel()
+  }
+  const toast = h(
+    "div",
+    { class: "toast info countdown", role: "status" },
+    h("span", { class: "sym ring-wrap" }, svg as unknown as Node),
+    msg,
+    h(
+      "button",
+      {
+        class: "icon-btn",
+        title: "Cancel (Esc)",
+        on: { click: () => finish(false) }
+      },
+      "×"
+    ),
+    opts.detail ? h("span", { class: "detail" }, opts.detail) : null,
+    h(
+      "div",
+      { class: "actions" },
+      h(
+        "button",
+        { class: "btn small", on: { click: () => finish(true) } },
+        opts.nowLabel
+      ),
+      h(
+        "button",
+        { class: "btn small", on: { click: () => finish(false) } },
+        "Cancel"
+      )
+    )
+  )
+
+  const end = Date.now() + opts.durationMs
+  const render = () => {
+    msg.textContent = opts.message(secondsLeft())
+  }
+  render()
+  container.append(toast)
+  raise()
+  // Animate the ring from empty to full over the countdown
+  fill.style.transition = `stroke-dashoffset ${opts.durationMs}ms linear`
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => (fill.style.strokeDashoffset = "0"))
+  )
+  const ticker = setInterval(render, 200)
+  const timer = setTimeout(() => finish(true), opts.durationMs)
+
+  return {
+    dispose: () => finish(false, false),
+    cancel: () => finish(false)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Highlight boxes
 
 export type BoxVariant = "hover" | "hover-bad" | "suggest" | "field" | "button"

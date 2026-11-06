@@ -768,3 +768,40 @@ select:focus {
     font-size: 18px;
   }
 }
+
+/* --- automatic fill ------------------------------------------------------ */
+
+.level-4 {
+  background: #4285f4;
+  color: white;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.check-row input {
+  accent-color: #4285f4;
+  width: 15px;
+  height: 15px;
+}
+
+.check-row:has(input:disabled) {
+  color: #9aa0a6;
+  cursor: default;
+}
+
+.inline-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.inline-select {
+  padding: 2px 6px;
+  font-size: 12px;
+}

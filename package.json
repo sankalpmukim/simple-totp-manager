@@ -57,6 +57,14 @@
       "setup-autofill": {
         "description": "Set up or edit TOTP autofill for this site"
       }
-    }
+    },
+    "optional_host_permissions": [
+      "http://*/*",
+      "https://*/*"
+    ],
+    "optional_permissions": [
+      "http://*/*",
+      "https://*/*"
+    ]
   }
 }
