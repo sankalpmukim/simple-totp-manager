@@ -1,7 +1,7 @@
 {
   "name": "simple-totp-manager",
   "displayName": "Simple totp manager",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A simple TOTP authenticator extension.",
   "author": "Sankalp Mukim <sankalpmukim@gmail.com>",
   "scripts": {
