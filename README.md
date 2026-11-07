@@ -105,7 +105,7 @@ The ⚙ in the popup opens the **TOTP Manager** page. The ✎ next to an account
 
 The shortcut can be changed on `chrome://extensions/shortcuts` (Chrome) or under about:addons → ⚙ → Manage Extension Shortcuts (Firefox). Chrome does not allow ⌘⌥ combinations; Firefox does.
 
-**Privacy**: by default the page script is injected only into the active tab, and only when you press the shortcut (`activeTab`), so the extension has no standing access to websites. Automatic filling is the exception: it runs only on the sites you turn it on for, using access you grant per site. Secrets never leave the extension; the page only receives the current 6-digit code, and only for a site you linked.
+**Privacy**: by default the page script is injected only into the active tab, and only when you press the shortcut (`activeTab`), so the extension has no standing access to websites. Automatic filling is the exception: it runs only on the sites you turn it on for, using access you grant per site. Secrets never leave the extension; the page only receives the current 6-digit code, and only for a site you linked. See [PRIVACY.md](PRIVACY.md).
 
 ## TOTP Secret Format
 
