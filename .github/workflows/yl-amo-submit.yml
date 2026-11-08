@@ -22,8 +22,10 @@ jobs:
           cache: "pnpm"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Build the Firefox extension
-        run: pnpm build:firefox
+      - name: Build and package the Firefox extension
+        run: |
+          pnpm build:firefox
+          pnpm package:firefox
       - name: Derive AMO credentials from SUBMIT_KEYS
         env:
           SUBMIT_KEYS: ${{ secrets.SUBMIT_KEYS }}
